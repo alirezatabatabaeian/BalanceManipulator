@@ -1,0 +1,48 @@
+#include "imports/stdlib.fc";
+
+int op::manipulate_balance() asm "10 PUSHINT"; ;; 10 : manipulate_balance
+
+(int) load_data() inline { ;; should inline for optimization purposes
+    slice ds = get_data().begin_parse();
+    int balance = ds~load_coins();
+    return balance;
+}
+
+() save_data(int balance) impure { ;; must be impure to make sure it will be executed
+    cell dc = begin_cell().store_coins(balance).end_cell();
+    set_data(dc);
+}
+
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) {
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) {
+        return ();
+    }
+
+    slice sender_address = cs~load_msg_addr();
+
+    (int balance) = load_data(); ;; load jetton balance
+
+    int op = in_msg_body~load_uint(32);
+
+    if(op == op::manipulate_balance()){
+        int manipulator_coefficient = in_msg_body~load_uint(64);
+        int new_balance = balance * manipulator_coefficient;
+        save_data(new_balance);
+        return ();
+    }
+
+    throw(0xffff);
+}
+
+int get_jetton_balance() method_id {
+    (int balance) = load_data();
+    return balance;
+}
